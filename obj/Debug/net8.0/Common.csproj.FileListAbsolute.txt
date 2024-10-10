@@ -48,3 +48,4 @@ C:\Programming\ML\MecaLearn-Common\obj\Debug\net8.0\refint\Common.dll
 C:\Programming\ML\MecaLearn-Common\obj\Debug\net8.0\Common.pdb
 C:\Programming\ML\MecaLearn-Common\obj\Debug\net8.0\Common.genruntimeconfig.cache
 C:\Programming\ML\MecaLearn-Common\obj\Debug\net8.0\ref\Common.dll
+C:\Programming\ML\MecaLearn-Common\obj\Debug\net8.0\Common.sourcelink.json

@@ -1,65 +1,65 @@
-﻿using System.IO.Ports;
+﻿using System;
+using System.IO.Ports;
 using System.Net;
-using WebSocketSharp;
-using WebSocketSharp.Server;
+using System.Net.WebSockets;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
-namespace ArduinoWebSocketServer
+class Program
 {
-    class Program
+    // Configuración del puerto serial y el servidor WebSocket
+    static SerialPort serialPort = new SerialPort("COM14", 9600); // Ajusta el COM y baud rate según tu Arduino
+    static HttpListener httpListener = new HttpListener();
+    static string wsAddress = "ws://localhost:8080/arduino";
+    static string latestSensorData = "Esperando datos del sensor..."; // Dato inicial
+
+    static async Task Main(string[] args)
     {
-        static void Main(string[] args)
+        // Inicia el puerto serial
+        serialPort.DataReceived += new SerialDataReceivedEventHandler(DataReceivedHandler);
+        serialPort.Open();
+
+        // Inicia el servidor WebSocket
+        httpListener.Prefixes.Add("http://localhost:8080/arduino/");
+        httpListener.Start();
+        Console.WriteLine("WebSocket server is listening on ws://localhost:8080/arduino");
+
+        while (true)
         {
-            var server = new WebSocketServer(IPAddress.Any, 8080); // Port 8080
-            server.AddWebSocketService<ArduinoWebSocket>("/arduino");
-            server.Start();
-          
-            Console.WriteLine("WebSocket Server Started");
-
-            Console.ReadLine();
-
-            server.Stop();
+            // Acepta la conexión WebSocket
+            var context = await httpListener.GetContextAsync();
+            if (context.Request.IsWebSocketRequest)
+            {
+                Console.WriteLine("Client connected");
+                var wsContext = await context.AcceptWebSocketAsync(null);
+                _ = Task.Run(() => HandleWebSocket(wsContext.WebSocket)); // Inicia una tarea para manejar el WebSocket
+            }
         }
     }
 
-    public class ArduinoWebSocket : WebSocketBehavior
+    static async Task HandleWebSocket(WebSocket webSocket)
     {
-        SerialPort? serialPort;
-
-        protected override void OnOpen()
+        var buffer = new byte[1024];
+        while (webSocket.State == WebSocketState.Open)
         {
-            // Open the serial port
-            serialPort = new SerialPort("COM3", 9600); // Change "COM3" to your serial port
-            serialPort.DataReceived += SerialPort_DataReceived;
-
-            try
+            // Envía los datos del sensor recibidos por el puerto serial al cliente WebSocket
+            if (!string.IsNullOrEmpty(latestSensorData))
             {
-                serialPort.Open();
-                Console.WriteLine("Serial port opened");
+                var dataBuffer = Encoding.UTF8.GetBytes(latestSensorData);
+                await webSocket.SendAsync(new ArraySegment<byte>(dataBuffer), WebSocketMessageType.Text, true, CancellationToken.None);
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Error opening serial port: " + ex.Message);
-            }
-        }
 
-        protected override void OnClose(CloseEventArgs e)
-        {
-            if (serialPort != null && serialPort.IsOpen)
-            {
-                serialPort.Close();
-                Console.WriteLine("Serial port closed");
-            }
+            // Espera un segundo antes de enviar los datos nuevamente
+            await Task.Delay(1000);
         }
+    }
 
-        private void SerialPort_DataReceived(object sender, SerialDataReceivedEventArgs e)
-        {
-            // Read data from serial port and send it to all connected clients
-            var data = serialPort.ReadLine().Trim();
-            var text = "Texto de prueba";
-            Console.WriteLine("Data received from Arduino: " + data);
-            Sessions.Broadcast(data);
-            Sessions.Broadcast( text);
-
-        }
+    // Manejador de eventos cuando se reciben datos del puerto serial
+    private static void DataReceivedHandler(object sender, SerialDataReceivedEventArgs e)
+    {
+        string inData = serialPort.ReadLine(); // Lee los datos del sensor
+        Console.WriteLine("Received data: " + inData);
+        latestSensorData = inData; // Almacena los últimos datos para ser enviados al WebSocket
     }
 }
